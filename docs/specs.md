@@ -2,6 +2,7 @@
 
 ## Ground-Rules
 
+* **Ground Rule 0 (Data Privacy & Isolation)**: The `data/` directory is listed in `.gitignore` and may contain sensitive financial data. Developers and users may ask to perform calculations on files and directories there. However, care **MUST** be given not to leak any info from `data/` into the codebase (in `src/`, `tests/`, or in documentation).
 * No reading of `.env` or other key files (if any).
 * Always use *relative path from repo root*. 
 * Create if not exists, and always use the `.venv` directory using python 3.12 (using conda env py312) at repo-root. 
@@ -31,3 +32,11 @@ There are going to be at least one transaction history csv file (such as `data/<
 **Task 2:** Write a python script to union the transaction history (for each entity) and deduplicate the overlaps. 
 
 **Task 3:** Write a python script, for each entity, using the transaction history as "ground truth", verify the completeness of the contracts (pdf files). Output Errors (but don't halt the program) for missing contracts and Warnings (there is a contract but the corresponding line in transaction history is missing). 
+
+### CGT Matching Engine
+
+**Task 4:** Write a python module and CLI command to perform bipartite trade matching for a given financial year to minimize Capital Gains Tax liability (supporting `granular` discrete-unit MILP optimization, `whole-buy` intact parcel allocation, and `fifo` matching).
+
+### Reporting & Audit Trail Exports
+
+**Task 5:** Write a python module and CLI command to deterministically export persistent mapping ledgers into multi-format reports (accountant CSVs and Markdown audit trail).

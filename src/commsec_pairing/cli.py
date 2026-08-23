@@ -8,6 +8,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from commsec_pairing.exporter import compute_annual_tax_summary, export_reports
 from commsec_pairing.ingester import (
     discover_transaction_csvs,
     save_transactions_to_csv,
@@ -15,7 +16,7 @@ from commsec_pairing.ingester import (
 )
 from commsec_pairing.matcher import CGTMatcher
 from commsec_pairing.models import MatchingStrategy
-from commsec_pairing.storage import MappingStorageManager
+from commsec_pairing.storage import MappingStorageManager, load_store_from_path_or_dir
 from commsec_pairing.verifier import verify_entity_contracts
 
 console = Console()
@@ -253,6 +254,94 @@ def handle_match(args: argparse.Namespace) -> int:
     return 0
 
 
+def handle_export(args: argparse.Namespace) -> int:
+    """Generate multi-format human-readable and accountant CSV/Markdown reports from matching store."""
+    entity_name = getattr(args, "entity", "") or ""
+    input_path = getattr(args, "input_mapping", None)
+    target_dir = None
+
+    if getattr(args, "dir", None):
+        target_dir = Path(args.dir)
+        if not entity_name:
+            entity_name = target_dir.name
+    elif entity_name:
+        # Check standard matched entity directory or raw entity directory
+        matched_candidate = Path(args.data_dir) / f"matched-{entity_name}"
+        raw_candidate = Path(args.data_dir) / entity_name
+        if matched_candidate.is_dir():
+            target_dir = matched_candidate
+        elif raw_candidate.is_dir():
+            target_dir = raw_candidate
+        else:
+            target_dir = matched_candidate
+
+    if input_path:
+        source_path = Path(input_path)
+    elif target_dir:
+        source_path = target_dir
+    else:
+        console.print("[bold red]Error:[/] Either --dir, --entity, or --input-mapping must be provided.", file=sys.stderr)
+        return 1
+
+    store = load_store_from_path_or_dir(source_path, entity=entity_name)
+    if not store.matches and not store.buy_inventory:
+        console.print(f"[bold yellow]Warning:[/] No matches or buy inventory found in {source_path}.", file=sys.stderr)
+
+    # Determine destination directory
+    out_dir = Path(args.output_dir) if getattr(args, "output_dir", None) else (
+        target_dir if target_dir else Path(".")
+    )
+
+    parcels_csv = Path(args.parcels_csv) if getattr(args, "parcels_csv", None) else None
+    summary_csv = Path(args.summary_csv) if getattr(args, "summary_csv", None) else None
+    report_md = Path(args.report_md) if getattr(args, "report_md", None) else None
+
+    exported = export_reports(
+        store,
+        output_dir=out_dir,
+        parcels_csv=parcels_csv,
+        summary_csv=summary_csv,
+        report_md=report_md,
+    )
+
+    console.print(Panel(f"[bold cyan]Portfolio Tax & Inventory Report Export[/]\n[dim]Entity:[/] {store.entity or entity_name} | [dim]Source:[/] {source_path}"))
+
+    # Display Rich summary table in terminal
+    summary_rows = compute_annual_tax_summary(store)
+    tax_table = Table(title="Annual Capital Gains Tax (CGT) Summary", show_header=True)
+    tax_table.add_column("Tax Year", style="bold")
+    tax_table.add_column("Strategy")
+    tax_table.add_column("Disposals", justify="right")
+    tax_table.add_column("Gross Gains", justify="right")
+    tax_table.add_column("Gross Losses", justify="right")
+    tax_table.add_column("Net Gross P/L", justify="right")
+    tax_table.add_column("CGT Discount", justify="right")
+    tax_table.add_column("Net Taxable P/L", justify="right", style="bold green")
+
+    for r in summary_rows:
+        tax_table.add_row(
+            f"FY {r['financial_year']}",
+            r["strategy"],
+            str(r["total_disposals"]),
+            f"${r['gross_gains']:,.2f}",
+            f"${r['gross_losses']:,.2f}",
+            f"${r['net_gross']:,.2f}",
+            f"${r['cgt_discount_deductions']:,.2f}",
+            f"${r['net_taxable']:,.2f}",
+        )
+    console.print(tax_table)
+
+    console.print("\n[bold green]✓ Successfully generated multi-format reports:[/] ")
+    console.print(f"  • [bold]Matched Parcels CSV:[/]        {exported['parcels_csv']}")
+    console.print(f"  • [bold]Annual Tax Summary CSV:[/]     {exported['summary_csv']}")
+    console.print(f"  • [bold]Audit Report Markdown:[/]      {exported['report_md']}")
+
+    if getattr(args, "stdout", False):
+        console.print("\n" + exported["report_md"].read_text(encoding="utf-8"))
+
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="commsec-pairing",
@@ -309,6 +398,19 @@ def build_parser() -> argparse.ArgumentParser:
     p_match.add_argument("--output-mapping", help="Optional path to output the updated mapping JSON file")
     p_match.add_argument("--save", action="store_true", help="Persist matches to default or output mapping file")
     p_match.set_defaults(func=handle_match)
+
+    # Export / Report subcommand
+    for cmd in ["export", "report"]:
+        p_export = subparsers.add_parser(cmd, help="Export human-readable Markdown and accountant CSV reports")
+        p_export.add_argument("--entity", help="Entity name (e.g. entity-1)")
+        p_export.add_argument("--dir", help="Directory containing mapping JSON files (e.g. data/matched-entity-1)")
+        p_export.add_argument("--input-mapping", help="Direct path to mapping JSON file")
+        p_export.add_argument("--output-dir", "--out-dir", dest="output_dir", help="Base directory to save output reports")
+        p_export.add_argument("--parcels-csv", help="Custom output path for matched parcels CSV")
+        p_export.add_argument("--summary-csv", help="Custom output path for annual CGT tax summary CSV")
+        p_export.add_argument("--report-md", help="Custom output path for Markdown audit report")
+        p_export.add_argument("--stdout", action="store_true", help="Print Markdown report directly to terminal stdout")
+        p_export.set_defaults(func=handle_export)
 
     return parser
 

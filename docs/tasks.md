@@ -61,3 +61,18 @@ Implement the tax liability minimization engine to pair buy lots with sell lots 
 - [x] Preserves identical persistent mapping store schema across all strategies.
 - [x] Supports multi-year chaining via `--input-mapping` and `--output-mapping`.
 - [x] Supported by `commsec_pairing.matcher` and CLI command `python -m commsec_pairing.cli match`.
+
+---
+
+## Task 5: Multi-Format Reporting & Export Engine
+
+### Objective
+Provide deterministic, multi-format export capabilities to convert persistent mapping ledgers into accountant-friendly CSV files and human-readable Markdown audit trails.
+
+### Requirements & Acceptance Criteria
+- [x] Generate granular matched parcels CSV (`matched_parcels.csv`) for accounting audit and spreadsheet analysis.
+- [x] Generate annual CGT tax summary CSV (`cgt_annual_tax_summary.csv`) aggregating metrics directly for Australian Tax Returns (Item 18).
+- [x] Generate comprehensive audit report Markdown (`audit_report.md`) with annual tax tables, trade details, and active buy inventory balances.
+- [x] Directory-first loading with validation fallback across sequence files.
+- [x] Support flexible CLI overrides (`--output-dir`, `--parcels-csv`, `--summary-csv`, `--report-md`, `--stdout`).
+- [x] Supported by `commsec_pairing.exporter` and CLI commands `python -m commsec_pairing.cli export` / `report`.

@@ -1,8 +1,11 @@
 """Persistent buy-sell mapping data structure and inventory management (Task 1)."""
 
 import json
+import logging
 from datetime import UTC, datetime
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from commsec_pairing.models import (
     BuyInventoryLot,
@@ -22,6 +25,49 @@ def load_mapping_store(file_path: str | Path, entity: str = "") -> PersistentMap
     with open(path, mode="r", encoding="utf-8") as f:
         data = json.load(f)
         return PersistentMappingStore.model_validate(data)
+
+
+def load_store_from_path_or_dir(target_path: str | Path, entity: str = "") -> PersistentMappingStore:
+    """
+    Load persistent store from either a JSON file or a directory containing mapping JSON files.
+    If a directory is passed, prefers 'mapping.json', then the latest 'mapping_fy*.json',
+    then falls back to any *.json file (skipping files that fail validation with a warning).
+    """
+    p = Path(target_path)
+    if p.is_file():
+        return load_mapping_store(p, entity=entity)
+
+    if p.is_dir():
+        mapping_file = p / "mapping.json"
+        if mapping_file.is_file():
+            return load_mapping_store(mapping_file, entity=entity or p.name)
+
+        # Look for mapping_fy*.json sorted descending (prefer most recent)
+        fy_files = sorted(p.glob("mapping_fy*.json"))
+        if fy_files:
+            return load_mapping_store(fy_files[-1], entity=entity or p.name)
+
+        # Fallback: scan any *.json, warn and skip files that fail validation
+        json_files = sorted(p.glob("*.json"))
+        for jf in reversed(json_files):  # most recently named last → try last first
+            try:
+                with open(jf, mode="r", encoding="utf-8") as f:
+                    data = json.load(f)
+                store = PersistentMappingStore.model_validate(data)
+                logger.warning(
+                    "load_store_from_path_or_dir: loaded fallback mapping file '%s'", jf
+                )
+                return store
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "load_store_from_path_or_dir: skipping '%s' — not a valid mapping store (%s: %s)",
+                    jf,
+                    type(exc).__name__,
+                    exc,
+                )
+
+    return PersistentMappingStore(entity=entity or (p.name if p.is_dir() else ""))
+
 
 
 def save_mapping_store(store: PersistentMappingStore, file_path: str | Path) -> None:

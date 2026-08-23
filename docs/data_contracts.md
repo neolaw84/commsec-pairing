@@ -111,3 +111,50 @@ Persisted as a JSON ledger (e.g. `data/<entity>/mapping.json` or custom `--outpu
 2. `remaining_units >= 0` for all inventory lots.
 3. For any buy lot $c$, $\sum_{m \in \text{matches}} m.\text{matched\_units} \le c.\text{total\_units}$.
 4. For any sell transaction $s$, $\sum_{m \in \text{matches}} m.\text{matched\_units} == s.\text{total\_units}$.
+
+---
+
+## 5. Generated Report Contracts & Formats
+
+Generated via `python -m commsec_pairing.cli export` (implemented by `commsec_pairing.exporter`).
+
+### A. Granular Matched Parcels CSV (`matched_parcels.csv`)
+Flat 1-row-per-matched-parcel audit trail for accounting systems and spreadsheet analysis:
+
+| Column | Type | Description | Example |
+|---|---|---|---|
+| `FinancialYear` | Integer | Australian tax year of the disposal | `2026` |
+| `Security` | String | Security ticker code | `SOL` |
+| `MatchedUnits` | Integer | Discrete share units in this match leg | `67` |
+| `BuyContractRef` | String | Buy contract confirmation reference | `C144815020` |
+| `BuyTradeDate` | String (`YYYY-MM-DD`) | Date shares were acquired | `2023-08-01` |
+| `BuyUnitPriceAUD` | Float (2 dec) | Purchase price per share | `32.83` |
+| `SellContractRef` | String | Sell contract confirmation reference | `C165524615` |
+| `SellTradeDate` | String (`YYYY-MM-DD`) | Date shares were disposed | `2025-09-02` |
+| `SellUnitPriceAUD` | Float (2 dec) | Sale price per share | `43.72` |
+| `HoldingPeriodDays` | Integer | Calendar days held ($D_{\text{sell}} - D_{\text{buy}}$) | `763` |
+| `CGTDiscountEligible` | Boolean | True if held $> 365$ days and gain $> 0$ | `True` |
+| `GrossGainLossAUD` | Float (2 dec) | Nominal capital gain or loss | `729.63` |
+| `TaxableGainLossAUD` | Float (2 dec) | Net taxable amount after 50% CGT discount | `364.81` |
+| `Strategy` | String | Matching strategy utilized | `granular` |
+| `MatchID` | String | Unique match identifier | `m_2026_0001` |
+
+### B. Annual CGT Tax Summary CSV (`cgt_annual_tax_summary.csv`)
+Aggregated per Australian Financial Year for direct copy-paste into Australian Tax Returns (Item 18: Capital Gains):
+
+| Column | Type | Description | Example |
+|---|---|---|---|
+| `FinancialYear` | String | Financial year label | `FY2026` |
+| `Strategy` | String | Matching strategy/strategies applied | `granular` |
+| `TotalDisposals` | Integer | Total number of matched disposal legs | `2` |
+| `TotalGrossGainsAUD` | Float (2 dec) | Sum of all positive nominal capital gains | `729.63` |
+| `TotalGrossLossesAUD` | Float (2 dec) | Sum of all nominal capital losses | `-704.27` |
+| `NetGrossGainLossAUD` | Float (2 dec) | Net nominal capital gain/loss | `25.36` |
+| `CGTDiscountDeductionAUD` | Float (2 dec) | Total 50% CGT discount deduction | `364.82` |
+| `NetTaxableGainLossAUD` | Float (2 dec) | Final net taxable capital gain/loss declared | `-339.46` |
+
+### C. Audit Report Markdown (`audit_report.md`)
+Human-readable documentation artifact containing:
+1. **Executive Annual CGT Table**: Summary table covering all financial years with gross P/L, discount deductions, and taxable P/L.
+2. **Disposal & Match Details by FY**: Tables breaking down each trade leg with contract IDs and holding days.
+3. **Active Buy Inventory Ledger**: Status of all remaining purchase parcels (`🟢 Available`, `🟡 Partial`, `🔴 Exhausted`).

@@ -8,6 +8,7 @@ A Python-based Capital Gains Tax (CGT) pairing and portfolio management engine f
 - **Transaction Ingestion & Deduplication**: Unions multiple overlapping transaction history CSVs per entity and deduplicates records using a 5-tuple fingerprint `(reference, date, security, units, action)`.
 - **Contract Verification**: Reconciles transaction records against contract note PDFs by inspecting text streams (completely file-name agnostic), flagging missing files (Errors) or unreferenced contracts (Warnings).
 - **Persistent Unit-Level Mapping**: Maintains a multi-year audit ledger of buy-to-sell unit allocations ensuring strict $1 \to [0, 1]$ unit conservation across tax years.
+- **Multi-Format Reporting & Export**: Deterministically exports audit ledgers to accountant-friendly CSVs (`matched_parcels.csv`, `cgt_annual_tax_summary.csv`) and human-readable Markdown (`audit_report.md`).
 - **Multi-Strategy CGT Matching Engine**:
   - `granular` *(Default)*: Mixed-Integer Linear Program (MILP) minimizing net taxable capital gains across discrete share units ($M \leftrightarrow N$).
   - `whole-buy`: 0-1 Knapsack MILP allocating intact buy contract parcels ($1 \to \text{Many}$).
@@ -56,6 +57,11 @@ python -m commsec_pairing.cli match --entity <entity-name> --fy 2025 --transacti
 
 # 4. Check inventory and ledger status
 python -m commsec_pairing.cli status --entity <entity-name>
+
+# 5. Export accountant CSVs and human-readable Markdown audit report
+python -m commsec_pairing.cli export --dir data/matched-<entity-name>
+# or specify individual custom destination paths:
+python -m commsec_pairing.cli export --entity <entity-name> --output-dir exports/
 ```
 
 ---

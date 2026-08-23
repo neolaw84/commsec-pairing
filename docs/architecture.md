@@ -102,9 +102,10 @@ $$\tau(b_i, s_j) = \begin{cases}
 
 | Module | Purpose | Key Classes / Functions |
 |---|---|---|
-| `commsec_pairing.models` | Pydantic data models & schemas | `Transaction`, `TradeAction`, `ContractSummary`, `MatchPair`, `PersistentMappingStore` |
+| `commsec_pairing.models` | Pydantic data models & schemas | `Transaction`, `TradeAction`, `ContractNote`, `MatchRecord`, `PersistentMappingStore` |
 | `commsec_pairing.ingester` | Ingests, normalizes, unions, and deduplicates CSV files | `load_transactions_csv`, `union_and_deduplicate`, `parse_trade_details` |
 | `commsec_pairing.verifier` | Reconciles CSV ground truth against contract PDFs | `verify_entity_contracts`, `ReconciliationReport` |
-| `commsec_pairing.storage` | Manages persistent state and inventory ledgers | `MappingStorageManager`, `load_mapping_store`, `save_mapping_store` |
-| `commsec_pairing.matcher` | Implements the MILP / bipartite matching solver | `CGTMatcher`, `optimize_pairing_for_fy` |
-| `commsec_pairing.cli` | Terminal interface with Rich formatting | `main`, `verify`, `union_csv`, `match`, `status` |
+| `commsec_pairing.storage` | Manages persistent state and inventory ledgers | `MappingStorageManager`, `load_store_from_path_or_dir`, `load_mapping_store`, `save_mapping_store` |
+| `commsec_pairing.matcher` | Implements the MILP / bipartite matching solver | `CGTMatcher`, `optimize_financial_year` |
+| `commsec_pairing.exporter` | Multi-format accountant CSV & Markdown audit reporting | `export_reports`, `generate_parcels_csv`, `generate_tax_summary_csv`, `generate_audit_report_md` |
+| `commsec_pairing.cli` | Terminal interface with Rich formatting | `main`, `handle_verify`, `handle_union_csv`, `handle_match`, `handle_status`, `handle_export` |

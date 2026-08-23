@@ -6,6 +6,7 @@ Welcome to the **CommSec Pairing** codebase. This guide defines operational rule
 
 ## 1. Ground Rules
 
+0. **Data Privacy & Isolation (Rule Zero)**: The `data/` directory is listed in `.gitignore` and contains sensitive financial and portfolio data. Developers and users may request calculations, pairing, and processing on files located there. However, care **MUST** be taken never to leak, commit, or hardcode information from `data/` into the codebase (in `src/`, `tests/`, or documentation).
 1. **Privacy & Anonymization**: Never store, hardcode, or commit real human names, personal identifiers, or account numbers. Always use generic placeholders (e.g., `entity-1`, `entity-a`, `<entity>`).
 2. **No Secret / Key Access**: Never attempt to read, inspect, or parse `.env`, `.env.*`, `*.key`, `*.pem`, or other credential files.
 3. **Relative Paths**: Always use paths relative to the repository root (e.g., `data/<entity>/`, `docs/specs.md`, `src/commsec_pairing/`).
@@ -81,13 +82,15 @@ commsec-pairing/
 │       ├── verifier.py            # PDF contract reconciliation & error/warning reporter
 │       ├── storage.py             # Persistent buy-sell mapping & inventory store
 │       ├── matcher.py             # CGT minimization and FIFO pairing engine
+│       ├── exporter.py            # Multi-format CSV & Markdown report generator
 │       └── cli.py                 # Rich CLI entrypoint
 └── tests/                         # Automated test suite
     ├── conftest.py                # Shared pytest fixtures & test data
     ├── test_ingester.py           # Ingestion & deduplication unit tests
     ├── test_verifier.py           # Contract verification unit tests
     ├── test_models_and_storage.py # Persistence & unit conservation tests
-    └── test_matcher.py            # Matching optimization & FIFO tests
+    ├── test_matcher.py            # Matching optimization & FIFO tests
+    └── test_exporter.py           # Reporting & CSV/Markdown export tests
 ```
 
 ---
@@ -133,6 +136,11 @@ python -m commsec_pairing.cli match --entity <entity-name> --fy 2025 --strategy 
 
 # Inspect persistent mapping ledger status
 python -m commsec_pairing.cli status --entity <entity-name>
+
+# Export accountant CSVs and Markdown audit report
+python -m commsec_pairing.cli export --dir data/matched-<entity-name>
+# or specify explicit output files
+python -m commsec_pairing.cli export --entity <entity-name> --output-dir exports/
 ```
 
 ---
