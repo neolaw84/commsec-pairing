@@ -41,16 +41,18 @@ pip install -e .[dev]
 # Run tests
 pytest
 
-# 1. Verify contract note completeness
-python -m commsec_pairing.cli verify --entity <entity-name>
-# or specify a direct directory path:
-python -m commsec_pairing.cli verify --dir data/<entity-name>
-
-# 2. Union & deduplicate overlapping CSVs
+# 1. Union & deduplicate overlapping CSVs (optional export)
 python -m commsec_pairing.cli union-csv --entity <entity-name> --output-file data/<entity-name>/unified_transactions.csv
+
+# 2. Verify contract note completeness against CSV ground truth
+python -m commsec_pairing.cli verify --entity <entity-name>
+# or using an explicit unified CSV:
+python -m commsec_pairing.cli verify --entity <entity-name> --transactions-csv data/<entity-name>/unified_transactions.csv
 
 # 3. Run trade matching for a financial year (e.g., FY 2025)
 python -m commsec_pairing.cli match --entity <entity-name> --fy 2025 --strategy granular --save
+# or using an explicit unified CSV:
+python -m commsec_pairing.cli match --entity <entity-name> --fy 2025 --transactions-csv data/<entity-name>/unified_transactions.csv --save
 
 # 4. Check inventory and ledger status
 python -m commsec_pairing.cli status --entity <entity-name>

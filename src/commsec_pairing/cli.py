@@ -43,7 +43,16 @@ def handle_verify(args: argparse.Namespace) -> int:
 
     console.print(Panel(f"[bold cyan]Verifying Contract Notes for Entity:[/] {entity_name} ({target_dir})"))
 
-    report = verify_entity_contracts(target_dir)
+    txs = None
+    if getattr(args, "transactions_csv", None):
+        csv_path = Path(args.transactions_csv)
+        if not csv_path.is_file():
+            console.print(f"[bold red]Error:[/] Transactions CSV not found: {csv_path}", file=sys.stderr)
+            return 1
+        txs = union_and_deduplicate([csv_path])
+        console.print(f"[dim]Using explicit transaction ground truth:[/] {csv_path} ({len(txs)} records)")
+
+    report = verify_entity_contracts(target_dir, transactions=txs)
 
     summary_table = Table(title="Reconciliation Summary", show_header=True)
     summary_table.add_column("Metric", style="bold")
@@ -155,8 +164,17 @@ def handle_status(args: argparse.Namespace) -> int:
 def handle_match(args: argparse.Namespace) -> int:
     """Run CGT minimization matcher for a financial year."""
     target_dir, entity_name = resolve_target_dir(args)
-    csv_files = discover_transaction_csvs(target_dir)
-    transactions = union_and_deduplicate(csv_files)
+
+    if getattr(args, "transactions_csv", None):
+        csv_path = Path(args.transactions_csv)
+        if not csv_path.is_file():
+            console.print(f"[bold red]Error:[/] Transactions CSV not found: {csv_path}", file=sys.stderr)
+            return 1
+        transactions = union_and_deduplicate([csv_path])
+        console.print(f"[dim]Using explicit transaction ground truth:[/] {csv_path} ({len(transactions)} records)")
+    else:
+        csv_files = discover_transaction_csvs(target_dir)
+        transactions = union_and_deduplicate(csv_files)
 
     default_mapping_file = target_dir / "mapping.json"
     manager = MappingStorageManager(default_mapping_file, entity_name)
@@ -248,6 +266,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_verify = subparsers.add_parser("verify", help="Verify contract PDFs against CSV ground truth")
     p_verify.add_argument("--entity", help="Entity name (e.g. entity-1)")
     p_verify.add_argument("--dir", help="Direct path to custom directory (e.g. data/entity-1 or /path/to/dir)")
+    p_verify.add_argument(
+        "--transactions-csv",
+        "--input-csv",
+        dest="transactions_csv",
+        help="Optional path to explicit/unified transaction CSV file (defaults to auto-discovering all CSVs in directory)",
+    )
     p_verify.set_defaults(func=handle_verify)
 
     # Union CSV subcommand
@@ -269,6 +293,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_match.add_argument("--entity", help="Entity name (e.g. entity-1)")
     p_match.add_argument("--dir", help="Direct path to custom directory")
     p_match.add_argument("--fy", type=int, required=True, help="Target financial year (e.g. 2026)")
+    p_match.add_argument(
+        "--transactions-csv",
+        "--input-csv",
+        dest="transactions_csv",
+        help="Optional path to explicit/unified transaction CSV file (defaults to auto-discovering all CSVs in directory)",
+    )
     p_match.add_argument(
         "--strategy",
         choices=["granular", "whole-buy", "fifo"],

@@ -100,3 +100,17 @@ def test_save_and_reload_csv(tmp_path):
     assert len(reloaded) == 1
     assert reloaded[0].reference == "C161775901"
     assert reloaded[0].parsed_trade.units == 29
+
+
+def test_cli_transactions_csv_parser():
+    from commsec_pairing.cli import build_parser
+
+    parser = build_parser()
+
+    # Test verify parser with --transactions-csv
+    args_verify = parser.parse_args(["verify", "--dir", "data/test", "--transactions-csv", "data/test/custom.csv"])
+    assert args_verify.transactions_csv == "data/test/custom.csv"
+
+    # Test match parser with --input-csv alias
+    args_match = parser.parse_args(["match", "--dir", "data/test", "--fy", "2025", "--input-csv", "data/test/custom.csv"])
+    assert args_match.transactions_csv == "data/test/custom.csv"
