@@ -77,7 +77,7 @@ class CGTMatcher:
         sell_txs = [
             tx
             for tx in transactions
-            if tx.reference.startswith("C")
+            if tx.is_contract
             and tx.parsed_trade
             and tx.parsed_trade.action == TradeAction.SELL
             and get_financial_year(tx.date) == target_fy
@@ -192,6 +192,7 @@ class CGTMatcher:
                         gross_gain_loss_aud=round(gross_gain_unit * alloc_units, 2),
                         taxable_gain_loss_aud=round(tax_gain_unit * alloc_units, 2),
                         strategy=MatchingStrategy.FIFO,
+                        is_short=getattr(buy, "is_short", False),
                     )
                 )
 
@@ -330,6 +331,7 @@ class CGTMatcher:
                         gross_gain_loss_aud=round(gross_gain_unit * allocated_units, 2),
                         taxable_gain_loss_aud=round(tax_gain_unit * allocated_units, 2),
                         strategy=MatchingStrategy.GRANULAR,
+                        is_short=getattr(buy, "is_short", False),
                     )
                 )
 
@@ -476,6 +478,7 @@ class CGTMatcher:
                         gross_gain_loss_aud=round(gross_gain_unit * allocated_units, 2),
                         taxable_gain_loss_aud=round(tax_gain_unit * allocated_units, 2),
                         strategy=MatchingStrategy.WHOLE_BUY,
+                        is_short=getattr(buy, "is_short", False),
                     )
                 )
 

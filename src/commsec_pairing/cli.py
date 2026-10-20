@@ -10,7 +10,10 @@ from rich.table import Table
 
 from commsec_pairing.exporter import compute_annual_tax_summary, export_reports
 from commsec_pairing.ingester import (
+    convert_moomoo_excel_to_transactions,
+    discover_moomoo_excel_files,
     discover_transaction_csvs,
+    export_moomoo_to_csv,
     save_transactions_to_csv,
     union_and_deduplicate,
 )
@@ -121,6 +124,74 @@ def handle_union_csv(args: argparse.Namespace) -> int:
     return 0
 
 
+def handle_ingest_moomoo(args: argparse.Namespace) -> int:
+    """Convert MooMoo Excel annual summary statement to standard transaction CSV."""
+    target_dir, entity_name = resolve_target_dir(args)
+    if not target_dir.is_dir():
+        console.print(f"[bold red]Error:[/] Directory not found: {target_dir}", file=sys.stderr)
+        return 1
+
+    if getattr(args, "excel_file", None):
+        excel_file = Path(args.excel_file)
+        if not excel_file.is_file():
+            console.print(f"[bold red]Error:[/] Excel file not found: {excel_file}", file=sys.stderr)
+            return 1
+    else:
+        candidates = discover_moomoo_excel_files(target_dir)
+        if not candidates:
+            console.print(f"[bold red]Error:[/] No .xlsx file found in {target_dir}", file=sys.stderr)
+            return 1
+        excel_file = candidates[0]
+
+    out_file = (
+        Path(args.output_file)
+        if getattr(args, "output_file", None)
+        else (target_dir / "Transactions_moomoo.csv")
+    )
+
+    console.print(
+        Panel(
+            f"[bold cyan]Ingesting MooMoo Excel Statement for Entity:[/] {entity_name}\n"
+            f"[dim]Source:[/] {excel_file.name}"
+        )
+    )
+
+    res_file = target_dir / "options_resolution.json"
+    try:
+        saved_path = export_moomoo_to_csv(excel_file, out_file, resolution_file=res_file)
+    except Exception as err:  # noqa: BLE001
+        console.print(f"[bold red]Ingestion Error:[/] {err}", file=sys.stderr)
+        return 1
+
+    txs = convert_moomoo_excel_to_transactions(excel_file, resolution_file=res_file)
+    stock_count = sum(1 for t in txs if t.parsed_trade and len(t.parsed_trade.security) <= 5)
+    opt_count = len(txs) - stock_count
+
+    console.print(f"[bold green]✓ Successfully converted {len(txs)} transaction records to:[/] {saved_path}")
+    console.print(f"  • Stock trade legs: {stock_count}")
+    console.print(f"  • Option trade legs: {opt_count}")
+
+    preview_table = Table(title="Converted Transactions Preview (First 10)", show_header=True)
+    preview_table.add_column("Date")
+    preview_table.add_column("Reference")
+    preview_table.add_column("Details")
+    preview_table.add_column("Debit($)", justify="right")
+    preview_table.add_column("Credit($)", justify="right")
+
+    for tx in txs[:10]:
+        preview_table.add_row(
+            tx.date.strftime("%d/%m/%Y"),
+            tx.reference,
+            tx.details,
+            f"{tx.debit:.2f}" if tx.debit is not None else "",
+            f"{tx.credit:.2f}" if tx.credit is not None else "",
+        )
+    console.print(preview_table)
+
+    return 0
+
+
+
 def handle_status(args: argparse.Namespace) -> int:
     """Display persistent mapping inventory status."""
     target_dir, entity_name = resolve_target_dir(args)
@@ -175,6 +246,17 @@ def handle_match(args: argparse.Namespace) -> int:
         console.print(f"[dim]Using explicit transaction ground truth:[/] {csv_path} ({len(transactions)} records)")
     else:
         csv_files = discover_transaction_csvs(target_dir)
+        if not csv_files:
+            excel_files = discover_moomoo_excel_files(target_dir)
+            if excel_files:
+                console.print(
+                    f"[bold yellow]No transaction CSV found in {target_dir}, but discovered MooMoo statement:[/] {excel_files[0].name}"
+                )
+                console.print("[dim]Auto-converting MooMoo statement to Transactions_moomoo.csv...[/]")
+                out_csv = target_dir / "Transactions_moomoo.csv"
+                res_file = target_dir / "options_resolution.json"
+                export_moomoo_to_csv(excel_files[0], out_csv, resolution_file=res_file)
+                csv_files = [out_csv]
         transactions = union_and_deduplicate(csv_files)
 
     default_mapping_file = target_dir / "mapping.json"
@@ -216,9 +298,10 @@ def handle_match(args: argparse.Namespace) -> int:
 
     match_table = Table(title=f"Optimized Pairing Matches - FY{args.fy} ({strategy.value})", show_header=True)
     match_table.add_column("Security")
+    match_table.add_column("Type", justify="center")
     match_table.add_column("Units", justify="right")
-    match_table.add_column("Buy Ref / Date")
-    match_table.add_column("Sell Ref / Date")
+    match_table.add_column("Open Leg (Ref / Date / Price)")
+    match_table.add_column("Close Leg (Ref / Date / Price)")
     match_table.add_column("Holding Days", justify="right")
     match_table.add_column("50% Discount?")
     match_table.add_column("Gross Gain/Loss", justify="right")
@@ -230,11 +313,24 @@ def handle_match(args: argparse.Namespace) -> int:
     for m in new_matches:
         total_gross += m.gross_gain_loss_aud
         total_taxable += m.taxable_gain_loss_aud
+        if getattr(m, "is_short", False):
+            pos_type = "[yellow]Short[/]"
+            open_leg = f"Sell Short: {m.sell.contract_ref} ({m.sell.trade_date}) @ ${m.sell.unit_price_aud:.2f}"
+            if m.buy.unit_price_aud == 0.0:
+                close_leg = f"Expired ($0.00) ({m.buy.trade_date})"
+            else:
+                close_leg = f"Buy Back: {m.buy.contract_ref} ({m.buy.trade_date}) @ ${m.buy.unit_price_aud:.2f}"
+        else:
+            pos_type = "[cyan]Long[/]"
+            open_leg = f"Buy: {m.buy.contract_ref} ({m.buy.trade_date}) @ ${m.buy.unit_price_aud:.2f}"
+            close_leg = f"Sell: {m.sell.contract_ref} ({m.sell.trade_date}) @ ${m.sell.unit_price_aud:.2f}"
+
         match_table.add_row(
             m.security,
+            pos_type,
             str(m.matched_units),
-            f"{m.buy.contract_ref} ({m.buy.trade_date})",
-            f"{m.sell.contract_ref} ({m.sell.trade_date})",
+            open_leg,
+            close_leg,
             str(m.holding_period_days),
             "Yes" if m.cgt_discount_eligible else "No",
             f"${m.gross_gain_loss_aud:,.2f}",
@@ -369,6 +465,26 @@ def build_parser() -> argparse.ArgumentParser:
     p_union.add_argument("--dir", help="Direct path to custom directory (e.g. data/entity-1 or /path/to/dir)")
     p_union.add_argument("--output-file", help="Optional output path for unified CSV")
     p_union.set_defaults(func=handle_union_csv)
+
+    # Ingest MooMoo subcommand
+    p_moomoo = subparsers.add_parser(
+        "ingest-moomoo",
+        help="Convert MooMoo Excel annual statement to standard transaction CSV",
+    )
+    p_moomoo.add_argument("--entity", help="Entity name (e.g. entity-1)")
+    p_moomoo.add_argument("--dir", help="Direct path to custom directory")
+    p_moomoo.add_argument(
+        "--excel-file",
+        "--file",
+        dest="excel_file",
+        help="Path to MooMoo Excel file (defaults to auto-discovering .xlsx in directory)",
+    )
+    p_moomoo.add_argument(
+        "--output-file",
+        help="Output CSV path (defaults to <entity_dir>/Transactions_moomoo.csv)",
+    )
+    p_moomoo.set_defaults(func=handle_ingest_moomoo)
+
 
     # Status subcommand
     p_status = subparsers.add_parser("status", help="Inspect inventory and match status")
