@@ -22,6 +22,7 @@ class ParsedTrade(BaseModel):
     units: int
     security: str
     unit_price: float
+    is_short: bool = False
 
 
 class Transaction(BaseModel):
@@ -32,10 +33,11 @@ class Transaction(BaseModel):
     credit: float | None = None
     balance: float | None = None
     parsed_trade: ParsedTrade | None = None
+    is_short: bool = False
 
     @property
     def is_contract(self) -> bool:
-        return self.reference.startswith("C") and self.parsed_trade is not None
+        return bool(self.reference) and self.parsed_trade is not None
 
 
 class ContractNote(BaseModel):
@@ -68,6 +70,7 @@ class MatchRecord(BaseModel):
     gross_gain_loss_aud: float
     taxable_gain_loss_aud: float
     strategy: MatchingStrategy = MatchingStrategy.GRANULAR
+    is_short: bool = False
 
 
 class BuyInventoryLot(BaseModel):
@@ -79,6 +82,7 @@ class BuyInventoryLot(BaseModel):
     matched_units: int = 0
     remaining_units: int
     is_exhausted: bool = False
+    is_short: bool = False
 
     @field_validator("remaining_units")
     @classmethod

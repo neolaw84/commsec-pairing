@@ -16,6 +16,7 @@ def generate_parcels_csv(store: PersistentMappingStore, output_path: Path) -> Pa
         writer.writerow([
             "FinancialYear",
             "Security",
+            "PositionType",
             "MatchedUnits",
             "BuyContractRef",
             "BuyTradeDate",
@@ -32,9 +33,11 @@ def generate_parcels_csv(store: PersistentMappingStore, output_path: Path) -> Pa
         ])
         for m in store.matches:
             strategy_val = m.strategy.value if hasattr(m.strategy, "value") else str(m.strategy)
+            pos_type = "Short" if getattr(m, "is_short", False) else "Long"
             writer.writerow([
                 m.financial_year,
                 m.security,
+                pos_type,
                 m.matched_units,
                 m.buy.contract_ref,
                 m.buy.trade_date.strftime("%Y-%m-%d"),
@@ -178,14 +181,25 @@ def generate_audit_report_md(store: PersistentMappingStore, output_path: Path) -
         for r in fys_with_matches:
             lines.append(f"### FY {r['financial_year']} (Strategy: `{r['strategy']}`)")
             lines.append("")
-            lines.append("| Security | Units | Buy Contract | Sell Contract | Holding (Days) | 50% CGT Disc? | Gross Gain / (Loss) | Taxable Gain / (Loss) |")
-            lines.append("| :--- | :---: | :--- | :--- | :---: | :---: | :---: | :---: |")
+            lines.append("| Security | Type | Units | Open Leg | Close Leg | Holding (Days) | 50% CGT Disc? | Gross Gain / (Loss) | Taxable Gain / (Loss) |")
+            lines.append("| :--- | :---: | :---: | :--- | :--- | :---: | :---: | :---: | :---: |")
             for m in r["matches"]:
                 disc_label = "Yes" if m.cgt_discount_eligible else "No"
+                is_short = getattr(m, "is_short", False)
+                pos_type = "Short" if is_short else "Long"
+                if is_short:
+                    open_leg = f"Sell Short: `{m.sell.contract_ref}` ({m.sell.trade_date}) @ ${m.sell.unit_price_aud:.2f}"
+                    if m.buy.unit_price_aud == 0.0:
+                        close_leg = f"Expired ($0.00) ({m.buy.trade_date})"
+                    else:
+                        close_leg = f"Buy Back: `{m.buy.contract_ref}` ({m.buy.trade_date}) @ ${m.buy.unit_price_aud:.2f}"
+                else:
+                    open_leg = f"Buy: `{m.buy.contract_ref}` ({m.buy.trade_date}) @ ${m.buy.unit_price_aud:.2f}"
+                    close_leg = f"Sell: `{m.sell.contract_ref}` ({m.sell.trade_date}) @ ${m.sell.unit_price_aud:.2f}"
+
                 lines.append(
-                    f"| **{m.security}** | {m.matched_units} | "
-                    f"`{m.buy.contract_ref}` ({m.buy.trade_date}) @ ${m.buy.unit_price_aud:.2f} | "
-                    f"`{m.sell.contract_ref}` ({m.sell.trade_date}) @ ${m.sell.unit_price_aud:.2f} | "
+                    f"| **{m.security}** | {pos_type} | {m.matched_units} | "
+                    f"{open_leg} | {close_leg} | "
                     f"{m.holding_period_days} | {disc_label} | "
                     f"${m.gross_gain_loss_aud:,.2f} | ${m.taxable_gain_loss_aud:,.2f} |"
                 )
@@ -197,12 +211,13 @@ def generate_audit_report_md(store: PersistentMappingStore, output_path: Path) -
     if not store.buy_inventory:
         lines.append("*No buy inventory recorded.*")
     else:
-        lines.append("| Security | Contract Ref | Trade Date | Unit Price | Total Units | Matched | Remaining | Status |")
-        lines.append("| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :--- |")
+        lines.append("| Security | Type | Contract Ref | Trade Date | Unit Price | Total Units | Matched | Remaining | Status |")
+        lines.append("| :--- | :---: | :--- | :---: | :---: | :---: | :---: | :---: | :--- |")
         for lot in store.buy_inventory:
             status = "🔴 Exhausted" if lot.is_exhausted else ("🟡 Partial" if lot.matched_units > 0 else "🟢 Available")
+            pos_type = "Short" if getattr(lot, "is_short", False) else "Long"
             lines.append(
-                f"| **{lot.security}** | `{lot.contract_ref}` | {lot.trade_date.strftime('%Y-%m-%d')} | "
+                f"| **{lot.security}** | {pos_type} | `{lot.contract_ref}` | {lot.trade_date.strftime('%Y-%m-%d')} | "
                 f"${lot.unit_price_aud:.2f} | {lot.total_units} | {lot.matched_units} | "
                 f"**{lot.remaining_units}** | {status} |"
             )

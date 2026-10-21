@@ -114,7 +114,7 @@ class MappingStorageManager:
 
         updated_lots: list[BuyInventoryLot] = []
         for tx in transactions:
-            if not (tx.reference.startswith("C") and tx.parsed_trade):
+            if not (tx.is_contract and tx.parsed_trade):
                 continue
             if tx.parsed_trade.action != TradeAction.BUY:
                 continue
@@ -148,6 +148,7 @@ class MappingStorageManager:
                     matched_units=already_matched,
                     remaining_units=remaining,
                     is_exhausted=(remaining == 0),
+                    is_short=tx.parsed_trade.is_short,
                 )
             )
 
